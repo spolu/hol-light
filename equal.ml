@@ -64,10 +64,10 @@ let AP_THM th tm =
   with Failure _ -> failwith "AP_THM";;
 
 let SYM th =
-  let tm = concl th in
+  substitute_proof (let tm = concl th in
   let l,r = dest_eq tm in
   let lth = REFL l in
-  EQ_MP (MK_COMB(AP_TERM (rator (rator tm)) th,lth)) lth;;
+  EQ_MP (MK_COMB(AP_TERM (rator (rator tm)) th,lth)) lth) (proof_SYM (proof_of th));;
 
 let ALPHA tm1 tm2 =
   try TRANS (REFL tm1) (REFL tm2)
