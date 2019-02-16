@@ -5,3 +5,8 @@
 *.cmx
 pa_j.ml
 update_database.ml
+
+facts.lst
+proofs
+theorems
+holstep-generate
