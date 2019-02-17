@@ -560,10 +560,12 @@ module Hol : Hol_kernel = struct
          | _ -> failwith "MK_COMB: types do not agree")
      | _ -> failwith "MK_COMB: not both equations"
 
-  let ABS v (Sequent(asl,c)) =
+  let ABS v (Sequent(asl,c,p)) =
     match (v,c) with
-      Var(_,_),Comb(Comb(Const("=",_),l),r) when not(exists (vfree_in v) asl)
-         -> Sequent(asl,safe_mk_eq (Abs(v,l)) (Abs(v,r)))
+      Var(_,_),Comb(Comb(Const("=",_),l),r) when not(exists (vfree_in v) asl) ->
+        let idx = length !the_proofs in
+        let th = Sequent(asl,safe_mk_eq (Abs(v,l)) (Abs(v,r)),idx) in
+        new_proof (Proof(idx,th,Pabs(List.nth !the_proofs p, v)))
     | _ -> failwith "ABS";;
 
 (* ------------------------------------------------------------------------- *)
