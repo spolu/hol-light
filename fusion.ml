@@ -23,6 +23,9 @@ module type Hol_kernel =
 
       type thm
 
+      type proof_index = int
+      type proof
+
       val types: unit -> (string * int)list
       val get_type_arity : string -> int
       val new_type : (string * int) -> unit
@@ -85,6 +88,8 @@ module type Hol_kernel =
       val new_basic_definition : term -> thm
       val new_basic_type_definition :
               string -> string * string -> thm -> thm * thm
+
+      val proof_of : thm -> proof
 end;;
 
 (* ------------------------------------------------------------------------- *)
@@ -101,7 +106,26 @@ module Hol : Hol_kernel = struct
             | Comb of term * term
             | Abs of term * term
 
-  type thm = Sequent of (term list * term)
+  type thm = Sequent of (term list * term * proof_index)
+
+(*---------------------------------------------------------------------------*)
+(* Proof tracing implementation and storage.                                 *) 
+(*---------------------------------------------------------------------------*)
+  type proof =
+    Proof of (proof_index * thm * proof_content)
+  and proof_content =
+    P_REFL of term                             (* term equal to itself *)
+  | PTRANS of proof * proof                    (* pred proofs *)
+  | P_MK_COMB of proof * proof                 (* pred proofs *)
+  | P_ABS of proof * term                      (* pred proof and Var(_,_) *)
+  | P_BETA of term                             (* applied abstraction of term*)
+  | P_ASSUME of term                           (* term assumed *)
+  | P_EQ_MP of proof * proof                   (* pred proofs *)
+  | P_DEDUCT_ANTISYM_RULE of proof * proof     (* pred proofs *)
+  | P_INST proof * (term * term) list          (* pred proof and insts *)
+  | P_INSTT proof * (hol_type * hol_type) list (* pred proof and insts *)
+
+  let the_proofs = Hashtbl.create (proof_index) (proof);;
 
 (* ------------------------------------------------------------------------- *)
 (* List of current type constants with their arities.                        *)
