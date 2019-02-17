@@ -113,7 +113,7 @@ loads "parser.ml";;     (* Lexer and parser                                  *)
 (* ------------------------------------------------------------------------- *)
 (* Higher level deductive system.                                            *)
 (* ------------------------------------------------------------------------- *)
-
+(*
 loads "equal.ml";;      (* Basic equality reasoning and conversionals        *)
 loads "bool.ml";;       (* Boolean theory and basic derived rules            *)
 loads "drule.ml";;      (* Additional derived rules                          *)
@@ -164,3 +164,4 @@ loads "define.ml";;     (* Support for general recursive definitions         *)
 
 loads "help.ml";;       (* Online help using the entries in Help directory   *)
 loads "database.ml";;   (* List of name-theorem pairs for search system      *)
+*)

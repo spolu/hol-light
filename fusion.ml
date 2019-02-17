@@ -13,7 +13,7 @@ module type Hol_kernel =
   sig
       type hol_type = private
         Tyvar of string
-      | Tyapp of string *  hol_type list
+      | Tyapp of string * hol_type list
 
       type term = private
         Var of string * hol_type
@@ -21,10 +21,10 @@ module type Hol_kernel =
       | Comb of term * term
       | Abs of term * term
 
-      type thm
-
-      type proof_index = int
       type proof
+      type proof_content
+
+      type thm
 
       val types: unit -> (string * int)list
       val get_type_arity : string -> int
@@ -106,26 +106,30 @@ module Hol : Hol_kernel = struct
             | Comb of term * term
             | Abs of term * term
 
-  type thm = Sequent of (term list * term * proof_index)
+
+  type thm = Sequent of (term list * term * int)
 
 (*---------------------------------------------------------------------------*)
 (* Proof tracing implementation and storage.                                 *) 
 (*---------------------------------------------------------------------------*)
   type proof =
-    Proof of (proof_index * thm * proof_content)
-  and proof_content =
-    P_REFL of term                             (* term equal to itself *)
-  | PTRANS of proof * proof                    (* pred proofs *)
-  | P_MK_COMB of proof * proof                 (* pred proofs *)
-  | P_ABS of proof * term                      (* pred proof and Var(_,_) *)
-  | P_BETA of term                             (* applied abstraction of term*)
-  | P_ASSUME of term                           (* term assumed *)
-  | P_EQ_MP of proof * proof                   (* pred proofs *)
-  | P_DEDUCT_ANTISYM_RULE of proof * proof     (* pred proofs *)
-  | P_INST proof * (term * term) list          (* pred proof and insts *)
-  | P_INSTT proof * (hol_type * hol_type) list (* pred proof and insts *)
+    Proof of (int * thm * proof_content)
+  and proof_content = Prefl of term
+                    | Ptrans of proof * proof
+                    | Pmkcomb of proof * proof
+                    | Pabs of proof * term
+                    | Pbeta of term
+                    | Passume of term
+                    | Peqmp of proof * proof
+                    | Pdeduct of proof * proof
+                    | Pinst of proof * (term * term) list
+                    | Pinstt of proof * (hol_type * hol_type) list
 
-  let the_proofs = Hashtbl.create (proof_index) (proof);;
+  let the_proofs = ref ([]:proof list)
+
+  let new_proof pr =
+    let Proof(idx,thm,content) = pr in
+    (the_proofs := pr::(!the_proofs); pr); thm
 
 (* ------------------------------------------------------------------------- *)
 (* List of current type constants with their arities.                        *)
@@ -509,36 +513,50 @@ module Hol : Hol_kernel = struct
 (* Basic theorem destructors.                                                *)
 (* ------------------------------------------------------------------------- *)
 
-  let dest_thm (Sequent(asl,c)) = (asl,c)
+  let dest_thm (Sequent(asl,c,_)) = (asl,c)
 
-  let hyp (Sequent(asl,c)) = asl
+  let hyp (Sequent(asl,c,_)) = asl
 
-  let concl (Sequent(asl,c)) = c
+  let concl (Sequent(asl,c,_)) = c
+
+  (*
+  let proof_of(Sequent(_,_,p)) = p
+  let proof_index_of(Sequent(_,_,(i,_,_))) = i
+  *)
 
 (* ------------------------------------------------------------------------- *)
 (* Basic equality properties; TRANS is derivable but included for efficiency *)
 (* ------------------------------------------------------------------------- *)
 
   let REFL tm =
-    Sequent([],safe_mk_eq tm tm)
+    let idx = length !the_proofs in
+    let th = Sequent([],safe_mk_eq tm tm,idx) in
+    new_proof (Proof(idx,th,Prefl tm))
 
-  let TRANS (Sequent(asl1,c1)) (Sequent(asl2,c2)) =
+  let TRANS (Sequent(asl1,c1,p1)) (Sequent(asl2,c2,p2)) =
     match (c1,c2) with
       Comb((Comb(Const("=",_),_) as eql),m1),Comb(Comb(Const("=",_),m2),r)
-        when alphaorder m1 m2 = 0 -> Sequent(term_union asl1 asl2,Comb(eql,r))
+        when alphaorder m1 m2 = 0 ->
+          let idx = length !the_proofs in
+          let th = Sequent(term_union asl1 asl2,Comb(eql,r),idx) in
+          new_proof (Proof(idx,th,Ptrans(List.nth !the_proofs p1,
+                                         List.nth !the_proofs p2)))
     | _ -> failwith "TRANS"
 
 (* ------------------------------------------------------------------------- *)
 (* Congruence properties of equality.                                        *)
 (* ------------------------------------------------------------------------- *)
 
-  let MK_COMB(Sequent(asl1,c1),Sequent(asl2,c2)) =
+  let MK_COMB(Sequent(asl1,c1,p1),Sequent(asl2,c2,p2)) =
      match (c1,c2) with
        Comb(Comb(Const("=",_),l1),r1),Comb(Comb(Const("=",_),l2),r2) ->
         (match type_of r1 with
-           Tyapp("fun",[ty;_]) when Pervasives.compare ty (type_of r2) = 0
-             -> Sequent(term_union asl1 asl2,
-                        safe_mk_eq (Comb(l1,l2)) (Comb(r1,r2)))
+           Tyapp("fun",[ty;_]) when Pervasives.compare ty (type_of r2) = 0 ->
+             let idx = length !the_proofs in
+             let th = Sequent(term_union asl1 asl2,
+                              safe_mk_eq (Comb(l1,l2)) (Comb(r1,r2)), idx) in
+             new_proof (Proof(idx,th,Pmkcomb(List.nth !the_proofs p1,
+                                             List.nth !the_proofs p2)))
          | _ -> failwith "MK_COMB: types do not agree")
      | _ -> failwith "MK_COMB: not both equations"
 
