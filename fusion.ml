@@ -554,7 +554,8 @@ module Hol : Hol_kernel = struct
            Tyapp("fun",[ty;_]) when Pervasives.compare ty (type_of r2) = 0 ->
              let idx = length !the_proofs in
              let th = Sequent(term_union asl1 asl2,
-                              safe_mk_eq (Comb(l1,l2)) (Comb(r1,r2)), idx) in
+                              safe_mk_eq (Comb(l1,l2)) (Comb(r1,r2)),
+                              idx) in
              new_proof (Proof(idx,th,Pmkcomb(List.nth !the_proofs p1,
                                              List.nth !the_proofs p2)))
          | _ -> failwith "MK_COMB: types do not agree")
@@ -574,8 +575,10 @@ module Hol : Hol_kernel = struct
 
   let BETA tm =
     match tm with
-      Comb(Abs(v,bod),arg) when Pervasives.compare arg v = 0
-        -> Sequent([],safe_mk_eq tm bod)
+      Comb(Abs(v,bod),arg) when Pervasives.compare arg v = 0 ->
+        let idx = length !the_proofs in
+        let th = Sequent([],safe_mk_eq tm bod,idx) in
+        new_proof (Proof(idx, th, Pbeta(tm)))
     | _ -> failwith "BETA: not a trivial beta-redex"
 
 (* ------------------------------------------------------------------------- *)
