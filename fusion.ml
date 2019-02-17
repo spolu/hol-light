@@ -592,15 +592,21 @@ module Hol : Hol_kernel = struct
       new_proof (Proof(idx, th, Passume(tm)))
     else failwith "ASSUME: not a proposition"
 
-  let EQ_MP (Sequent(asl1,eq)) (Sequent(asl2,c)) =
+  let EQ_MP (Sequent(asl1,eq,p1)) (Sequent(asl2,c,p2)) =
     match eq with
-      Comb(Comb(Const("=",_),l),r) when alphaorder l c = 0
-        -> Sequent(term_union asl1 asl2,r)
+      Comb(Comb(Const("=",_),l),r) when alphaorder l c = 0 ->
+        let idx = length !the_proofs in
+        let th = Sequent(term_union asl1 asl2,r,idx) in
+        new_proof (Proof(idx, th, Peqmp(List.nth !the_proofs p1,
+                                        List.nth !the_proofs p2)))
     | _ -> failwith "EQ_MP"
 
-  let DEDUCT_ANTISYM_RULE (Sequent(asl1,c1)) (Sequent(asl2,c2)) =
+  let DEDUCT_ANTISYM_RULE (Sequent(asl1,c1,p1)) (Sequent(asl2,c2,p2)) =
     let asl1' = term_remove c2 asl1 and asl2' = term_remove c1 asl2 in
-    Sequent(term_union asl1' asl2',safe_mk_eq c1 c2)
+    let idx = length !the_proofs in
+    let th = Sequent(term_union asl1' asl2',safe_mk_eq c1 c2,idx) in
+    new_proof (Proof(idx, th, Pdeduct(List.nth !the_proofs p1,
+                                      List.nth !the_proofs p2)))
 
 (* ------------------------------------------------------------------------- *)
 (* Type and term instantiation.                                              *)
