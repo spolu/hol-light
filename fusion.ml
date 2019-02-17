@@ -586,7 +586,10 @@ module Hol : Hol_kernel = struct
 (* ------------------------------------------------------------------------- *)
 
   let ASSUME tm =
-    if Pervasives.compare (type_of tm) bool_ty = 0 then Sequent([tm],tm)
+    if Pervasives.compare (type_of tm) bool_ty = 0 then
+      let idx = length !the_proofs in
+      let th = Sequent([tm],tm,idx) in
+      new_proof (Proof(idx, th, Passume(tm)))
     else failwith "ASSUME: not a proposition"
 
   let EQ_MP (Sequent(asl1,eq)) (Sequent(asl2,c)) =
