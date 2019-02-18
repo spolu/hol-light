@@ -144,8 +144,6 @@ module Hol : Hol_kernel = struct
   | Pdef of term * string * hol_type
   | Pdeft of proof * term * string * hol_type
 
-  (* let the_proofs = ref ([]:proof list) *)
-
   let the_proofs = Hashtbl.create 100000
   let the_proofs_idx = ref (0)
 
@@ -159,12 +157,6 @@ module Hol : Hol_kernel = struct
   let new_proof pr =
     let Proof(idx,thm,content) = pr in
     (Hashtbl.add the_proofs idx pr; thm)
-
-  (*
-  let new_proof pr =
-    let Proof(idx,thm,content) = pr in
-    (the_proofs := pr::(!the_proofs); pr); thm
-  *)
 
 (* ------------------------------------------------------------------------- *)
 (* List of current type constants with their arities.                        *)
