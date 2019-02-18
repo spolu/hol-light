@@ -21,10 +21,24 @@ module type Hol_kernel =
       | Comb of term * term
       | Abs of term * term
 
-      type proof
-      type proof_content
-
       type thm
+
+      type proof = private
+        Proof of (int * thm * proof_content)
+      and proof_content = private
+        Prefl of term
+      | Ptrans of proof * proof
+      | Pmkcomb of proof * proof
+      | Pabs of proof * term
+      | Pbeta of term
+      | Passume of term
+      | Peqmp of proof * proof
+      | Pdeduct of proof * proof
+      | Pinst of proof * (term * term) list
+      | Pinstt of proof * (hol_type * hol_type) list
+      | Paxiom of term
+      | Pdef of term * string * hol_type
+      | Pdeft of proof * term * string * hol_type
 
       val types: unit -> (string * int)list
       val get_type_arity : string -> int
@@ -89,6 +103,7 @@ module type Hol_kernel =
       val new_basic_type_definition :
               string -> string * string -> thm -> thm * thm
 
+      val proofs : unit -> proof list
       val proof_of : thm -> proof
 end;;
 
@@ -114,25 +129,42 @@ module Hol : Hol_kernel = struct
 (*---------------------------------------------------------------------------*)
   type proof =
     Proof of (int * thm * proof_content)
-  and proof_content = Prefl of term
-                    | Ptrans of proof * proof
-                    | Pmkcomb of proof * proof
-                    | Pabs of proof * term
-                    | Pbeta of term
-                    | Passume of term
-                    | Peqmp of proof * proof
-                    | Pdeduct of proof * proof
-                    | Pinst of proof * (term * term) list
-                    | Pinstt of proof * (hol_type * hol_type) list
-                    | Paxiom of term
-                    | Pdef of term * string * hol_type
-                    | Pdeft of proof * term * string * hol_type
+  and proof_content =
+    Prefl of term
+  | Ptrans of proof * proof
+  | Pmkcomb of proof * proof
+  | Pabs of proof * term
+  | Pbeta of term
+  | Passume of term
+  | Peqmp of proof * proof
+  | Pdeduct of proof * proof
+  | Pinst of proof * (term * term) list
+  | Pinstt of proof * (hol_type * hol_type) list
+  | Paxiom of term
+  | Pdef of term * string * hol_type
+  | Pdeft of proof * term * string * hol_type
 
-  let the_proofs = ref ([]:proof list)
+  (* let the_proofs = ref ([]:proof list) *)
+
+  let the_proofs = Hashtbl.create 100000
+  let the_proofs_idx = ref (0)
+
+  let proofs() =
+    Hashtbl.fold (fun idx pr acc -> pr :: acc) the_proofs []
+
+  let next_proof_idx() =
+    let idx = !the_proofs_idx + 1 in
+    (the_proofs_idx := idx; idx)
 
   let new_proof pr =
     let Proof(idx,thm,content) = pr in
+    (Hashtbl.add the_proofs idx pr; thm)
+
+  (*
+  let new_proof pr =
+    let Proof(idx,thm,content) = pr in
     (the_proofs := pr::(!the_proofs); pr); thm
+  *)
 
 (* ------------------------------------------------------------------------- *)
 (* List of current type constants with their arities.                        *)
@@ -522,14 +554,14 @@ module Hol : Hol_kernel = struct
 
   let concl (Sequent(asl,c,_)) = c
 
-  let proof_of(Sequent(_,_,p)) = List.nth !the_proofs p
+  let proof_of(Sequent(_,_,p)) = Hashtbl.find the_proofs p
 
 (* ------------------------------------------------------------------------- *)
 (* Basic equality properties; TRANS is derivable but included for efficiency *)
 (* ------------------------------------------------------------------------- *)
 
   let REFL tm =
-    let idx = length !the_proofs in
+    let idx = next_proof_idx() in
     let th = Sequent([],safe_mk_eq tm tm,idx) in
     new_proof (Proof(idx,th,Prefl tm))
 
@@ -537,10 +569,10 @@ module Hol : Hol_kernel = struct
     match (c1,c2) with
       Comb((Comb(Const("=",_),_) as eql),m1),Comb(Comb(Const("=",_),m2),r)
         when alphaorder m1 m2 = 0 ->
-          let idx = length !the_proofs in
+          let idx = next_proof_idx() in
           let th = Sequent(term_union asl1 asl2,Comb(eql,r),idx) in
-          new_proof (Proof(idx,th,Ptrans(List.nth !the_proofs p1,
-                                         List.nth !the_proofs p2)))
+          new_proof (Proof(idx,th,Ptrans(Hashtbl.find the_proofs p1,
+                                         Hashtbl.find the_proofs p2)))
     | _ -> failwith "TRANS"
 
 (* ------------------------------------------------------------------------- *)
@@ -552,21 +584,21 @@ module Hol : Hol_kernel = struct
        Comb(Comb(Const("=",_),l1),r1),Comb(Comb(Const("=",_),l2),r2) ->
         (match type_of r1 with
            Tyapp("fun",[ty;_]) when Pervasives.compare ty (type_of r2) = 0 ->
-             let idx = length !the_proofs in
+             let idx = next_proof_idx() in
              let th = Sequent(term_union asl1 asl2,
                               safe_mk_eq (Comb(l1,l2)) (Comb(r1,r2)),
                               idx) in
-             new_proof (Proof(idx,th,Pmkcomb(List.nth !the_proofs p1,
-                                             List.nth !the_proofs p2)))
+             new_proof (Proof(idx,th,Pmkcomb(Hashtbl.find the_proofs p1,
+                                             Hashtbl.find the_proofs p2)))
          | _ -> failwith "MK_COMB: types do not agree")
      | _ -> failwith "MK_COMB: not both equations"
 
   let ABS v (Sequent(asl,c,p)) =
     match (v,c) with
       Var(_,_),Comb(Comb(Const("=",_),l),r) when not(exists (vfree_in v) asl) ->
-        let idx = length !the_proofs in
+        let idx = next_proof_idx() in
         let th = Sequent(asl,safe_mk_eq (Abs(v,l)) (Abs(v,r)),idx) in
-        new_proof (Proof(idx,th,Pabs(List.nth !the_proofs p, v)))
+        new_proof (Proof(idx,th,Pabs(Hashtbl.find the_proofs p, v)))
     | _ -> failwith "ABS";;
 
 (* ------------------------------------------------------------------------- *)
@@ -576,7 +608,7 @@ module Hol : Hol_kernel = struct
   let BETA tm =
     match tm with
       Comb(Abs(v,bod),arg) when Pervasives.compare arg v = 0 ->
-        let idx = length !the_proofs in
+        let idx = next_proof_idx() in
         let th = Sequent([],safe_mk_eq tm bod,idx) in
         new_proof (Proof(idx,th,Pbeta(tm)))
     | _ -> failwith "BETA: not a trivial beta-redex"
@@ -587,7 +619,7 @@ module Hol : Hol_kernel = struct
 
   let ASSUME tm =
     if Pervasives.compare (type_of tm) bool_ty = 0 then
-      let idx = length !the_proofs in
+      let idx = next_proof_idx() in
       let th = Sequent([tm],tm,idx) in
       new_proof (Proof(idx,th,Passume(tm)))
     else failwith "ASSUME: not a proposition"
@@ -595,34 +627,34 @@ module Hol : Hol_kernel = struct
   let EQ_MP (Sequent(asl1,eq,p1)) (Sequent(asl2,c,p2)) =
     match eq with
       Comb(Comb(Const("=",_),l),r) when alphaorder l c = 0 ->
-        let idx = length !the_proofs in
+        let idx = next_proof_idx() in
         let th = Sequent(term_union asl1 asl2,r,idx) in
-        new_proof (Proof(idx,th,Peqmp(List.nth !the_proofs p1,
-                                      List.nth !the_proofs p2)))
+        new_proof (Proof(idx,th,Peqmp(Hashtbl.find the_proofs p1,
+                                      Hashtbl.find the_proofs p2)))
     | _ -> failwith "EQ_MP"
 
   let DEDUCT_ANTISYM_RULE (Sequent(asl1,c1,p1)) (Sequent(asl2,c2,p2)) =
     let asl1' = term_remove c2 asl1 and asl2' = term_remove c1 asl2 in
-    let idx = length !the_proofs in
+    let idx = next_proof_idx() in
     let th = Sequent(term_union asl1' asl2',safe_mk_eq c1 c2,idx) in
-    new_proof (Proof(idx,th,Pdeduct(List.nth !the_proofs p1,
-                                    List.nth !the_proofs p2)))
+    new_proof (Proof(idx,th,Pdeduct(Hashtbl.find the_proofs p1,
+                                    Hashtbl.find the_proofs p2)))
 
 (* ------------------------------------------------------------------------- *)
 (* Type and term instantiation.                                              *)
 (* ------------------------------------------------------------------------- *)
 
   let INST_TYPE theta (Sequent(asl,c,p)) =
-    let idx = length !the_proofs in
+    let idx = next_proof_idx() in
     let inst_fn = inst theta in
     let th = Sequent(term_image inst_fn asl,inst_fn c,idx) in
-    new_proof (Proof(idx,th,Pinstt(List.nth !the_proofs p,theta)))
+    new_proof (Proof(idx,th,Pinstt(Hashtbl.find the_proofs p,theta)))
 
   let INST theta (Sequent(asl,c,p)) =
-    let idx = length !the_proofs in
+    let idx = next_proof_idx() in
     let inst_fun = vsubst theta in
     let th = Sequent(term_image inst_fun asl,inst_fun c,idx) in
-    new_proof (Proof(idx,th,Pinst(List.nth !the_proofs p,theta)))
+    new_proof (Proof(idx,th,Pinst(Hashtbl.find the_proofs p,theta)))
 
 (* ------------------------------------------------------------------------- *)
 (* Handling of axioms.                                                       *)
@@ -634,7 +666,7 @@ module Hol : Hol_kernel = struct
 
   let new_axiom tm =
     if Pervasives.compare (type_of tm) bool_ty = 0 then
-      let idx = length !the_proofs in
+      let idx = next_proof_idx() in
       let th = Sequent([],tm,idx) in
        (the_axioms := th::(!the_axioms);
         new_proof (Proof(idx,th,Paxiom(tm))))
@@ -655,7 +687,7 @@ module Hol : Hol_kernel = struct
         else if not (subset (type_vars_in_term r) (tyvars ty))
         then failwith "new_definition: Type variables not reflected in constant"
         else let c = new_constant(cname,ty); Const(cname,ty) in
-             let idx = length !the_proofs in
+             let idx = next_proof_idx() in
              let dtm = safe_mk_eq c r in
              let dth = Sequent([],dtm,idx) in
              (the_definitions := dth::(!the_definitions);
@@ -695,19 +727,19 @@ module Hol : Hol_kernel = struct
     let abs = (new_constant(absname,absty); Const(absname,absty))
     and rep = (new_constant(repname,repty); Const(repname,repty)) in
     let a = Var("a",aty) and r = Var("r",rty) in
-    let aidx = length !the_proofs in
+    let aidx = next_proof_idx() in
     let atm = safe_mk_eq (Comb(abs,mk_comb(rep,a))) a in
     let ath = Sequent([],atm,aidx) in
-    let ridx = aidx + 1 in
+    let ridx = next_proof_idx() in
     let rtm = safe_mk_eq (Comb(P,r))
                            (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r) in
     let rth = Sequent([],rtm,ridx) in
     (new_proof (Proof(aidx,
                       ath,
-                      Pdeft(List.nth !the_proofs p,atm,absname,absty))),
+                      Pdeft(Hashtbl.find the_proofs p,atm,absname,absty))),
      new_proof (Proof(ridx,
                       rth,
-                      Pdeft(List.nth !the_proofs p,rtm,repname,repty))))
+                      Pdeft(Hashtbl.find the_proofs p,rtm,repname,repty))))
 
 end;;
 
