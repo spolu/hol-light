@@ -10,8 +10,20 @@ let thm_string th =
   let rec asl_string asl =
     match asl with
       [] -> ""
+    | tm::[] -> Printf.sprintf("%s") (term_string tm)
     | tm::tail -> Printf.sprintf("%s,%s") (term_string tm) (asl_string tail)
   in Printf.sprintf "T([%s],%s)" (asl_string asl) (term_string tm)
+
+let rec inst_string insts =
+  match insts with
+    [] -> ""
+  | (t1,t2)::[] -> Printf.sprintf "I(%s,%s)"
+                                  (term_string t1)
+                                  (term_string t2)
+  | (t1,t2)::tail -> Printf.sprintf "I(%s,%s),%s"
+                                    (term_string t1)
+                                    (term_string t2)
+                                    (inst_string tail)
 
 let proof_index proof =
   let Proof(idx,_,_) = proof in idx
@@ -39,10 +51,11 @@ let proof_content_string content =
   | Pdeduct(p1,p2) -> Printf.sprintf "DEDUCT_ANTISYM_RULE(%d,%d)"
                                      (proof_index p1)
                                      (proof_index p2)
-  | Pinst(p1,tlst) -> Printf.sprintf "INST(%d)"
-                                     (proof_index p1)
-  | Pinstt(p1,tlst) -> Printf.sprintf "INST_TYPE(%d)"
+  | Pinst(p1,insts) -> Printf.sprintf "INST(%d,[%s])"
                                       (proof_index p1)
+                                      (inst_string insts)
+  | Pinstt(p1,insts) -> Printf.sprintf "INST_TYPE(%d)"
+                                       (proof_index p1)
   | Paxiom(tm) -> Printf.sprintf "AXIOM(%s)"
                                  (term_string tm)
   | Pdef(tm,name,ty) -> Printf.sprintf "DEFINITION(%s,%s)"
