@@ -124,6 +124,8 @@ module Hol : Hol_kernel = struct
                     | Pdeduct of proof * proof
                     | Pinst of proof * (term * term) list
                     | Pinstt of proof * (hol_type * hol_type) list
+                    | Paxiom of term
+                    | Pdefinition of term
 
   let the_proofs = ref ([]:proof list)
 
@@ -578,7 +580,7 @@ module Hol : Hol_kernel = struct
       Comb(Abs(v,bod),arg) when Pervasives.compare arg v = 0 ->
         let idx = length !the_proofs in
         let th = Sequent([],safe_mk_eq tm bod,idx) in
-        new_proof (Proof(idx, th, Pbeta(tm)))
+        new_proof (Proof(idx,th,Pbeta(tm)))
     | _ -> failwith "BETA: not a trivial beta-redex"
 
 (* ------------------------------------------------------------------------- *)
@@ -589,7 +591,7 @@ module Hol : Hol_kernel = struct
     if Pervasives.compare (type_of tm) bool_ty = 0 then
       let idx = length !the_proofs in
       let th = Sequent([tm],tm,idx) in
-      new_proof (Proof(idx, th, Passume(tm)))
+      new_proof (Proof(idx,th,Passume(tm)))
     else failwith "ASSUME: not a proposition"
 
   let EQ_MP (Sequent(asl1,eq,p1)) (Sequent(asl2,c,p2)) =
@@ -597,28 +599,32 @@ module Hol : Hol_kernel = struct
       Comb(Comb(Const("=",_),l),r) when alphaorder l c = 0 ->
         let idx = length !the_proofs in
         let th = Sequent(term_union asl1 asl2,r,idx) in
-        new_proof (Proof(idx, th, Peqmp(List.nth !the_proofs p1,
-                                        List.nth !the_proofs p2)))
+        new_proof (Proof(idx,th,Peqmp(List.nth !the_proofs p1,
+                                      List.nth !the_proofs p2)))
     | _ -> failwith "EQ_MP"
 
   let DEDUCT_ANTISYM_RULE (Sequent(asl1,c1,p1)) (Sequent(asl2,c2,p2)) =
     let asl1' = term_remove c2 asl1 and asl2' = term_remove c1 asl2 in
     let idx = length !the_proofs in
     let th = Sequent(term_union asl1' asl2',safe_mk_eq c1 c2,idx) in
-    new_proof (Proof(idx, th, Pdeduct(List.nth !the_proofs p1,
-                                      List.nth !the_proofs p2)))
+    new_proof (Proof(idx,th,Pdeduct(List.nth !the_proofs p1,
+                                    List.nth !the_proofs p2)))
 
 (* ------------------------------------------------------------------------- *)
 (* Type and term instantiation.                                              *)
 (* ------------------------------------------------------------------------- *)
 
-  let INST_TYPE theta (Sequent(asl,c)) =
+  let INST_TYPE theta (Sequent(asl,c,p)) =
+    let idx = length !the_proofs in
     let inst_fn = inst theta in
-    Sequent(term_image inst_fn asl,inst_fn c)
+    let th = Sequent(term_image inst_fn asl,inst_fn c,idx) in
+    new_proof (Proof(idx,th,Pinstt(List.nth !the_proofs p,theta)))
 
-  let INST theta (Sequent(asl,c)) =
+  let INST theta (Sequent(asl,c,p)) =
+    let idx = length !the_proofs in
     let inst_fun = vsubst theta in
-    Sequent(term_image inst_fun asl,inst_fun c)
+    let th = Sequent(term_image inst_fun asl,inst_fun c,idx) in
+    new_proof (Proof(idx,th,Pinst(List.nth !the_proofs p,theta)))
 
 (* ------------------------------------------------------------------------- *)
 (* Handling of axioms.                                                       *)
@@ -630,8 +636,10 @@ module Hol : Hol_kernel = struct
 
   let new_axiom tm =
     if Pervasives.compare (type_of tm) bool_ty = 0 then
-      let th = Sequent([],tm) in
-       (the_axioms := th::(!the_axioms); th)
+      let idx = length !the_proofs in
+      let th = Sequent([],tm,idx) in
+       (the_axioms := th::(!the_axioms);
+        new_proof (Proof(idx,th,Paxiom(tm))))
     else failwith "new_axiom: Not a proposition"
 
 (* ------------------------------------------------------------------------- *)
@@ -649,8 +657,11 @@ module Hol : Hol_kernel = struct
         else if not (subset (type_vars_in_term r) (tyvars ty))
         then failwith "new_definition: Type variables not reflected in constant"
         else let c = new_constant(cname,ty); Const(cname,ty) in
-             let dth = Sequent([],safe_mk_eq c r) in
-             the_definitions := dth::(!the_definitions); dth
+             let idx = length !the_proofs in
+             let dtm = safe_mk_eq c r in
+             let dth = Sequent([],dtm,idx) in
+             (the_definitions := dth::(!the_definitions);
+              new_proof (Proof(idx,dth,Pdefinition(dtm))))
     | _ -> failwith "new_basic_definition"
 
 (* ------------------------------------------------------------------------- *)
