@@ -5,3 +5,4 @@
 *.cmx
 pa_j.ml
 update_database.ml
+*.lst

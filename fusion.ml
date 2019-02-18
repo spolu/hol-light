@@ -144,11 +144,15 @@ module Hol : Hol_kernel = struct
   | Pdef of term * string * hol_type
   | Pdeft of proof * term * string * hol_type
 
-  let the_proofs = Hashtbl.create 100000
-  let the_proofs_idx = ref (0)
+  let the_proofs = Hashtbl.create 500000
+  let the_proofs_idx = ref (-1)
+
+  let the_proofs_idx_comp p1 p2 =
+    let (Proof(i1,_,_),Proof(i2,_,_)) = (p1,p2) in (i1 - i2)
 
   let proofs() =
-    Hashtbl.fold (fun idx pr acc -> pr :: acc) the_proofs []
+    List.sort the_proofs_idx_comp
+              (Hashtbl.fold (fun idx pr acc -> pr :: acc) the_proofs [])
 
   let next_proof_idx() =
     let idx = !the_proofs_idx + 1 in
