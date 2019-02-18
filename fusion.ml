@@ -125,7 +125,8 @@ module Hol : Hol_kernel = struct
                     | Pinst of proof * (term * term) list
                     | Pinstt of proof * (hol_type * hol_type) list
                     | Paxiom of term
-                    | Pdefinition of term
+                    | Pdef of term * string * hol_type
+                    | Pdeft of proof * term * string * hol_type
 
   let the_proofs = ref ([]:proof list)
 
@@ -521,10 +522,7 @@ module Hol : Hol_kernel = struct
 
   let concl (Sequent(asl,c,_)) = c
 
-  (*
-  let proof_of(Sequent(_,_,p)) = p
-  let proof_index_of(Sequent(_,_,(i,_,_))) = i
-  *)
+  let proof_of(Sequent(_,_,p)) = List.nth !the_proofs p
 
 (* ------------------------------------------------------------------------- *)
 (* Basic equality properties; TRANS is derivable but included for efficiency *)
@@ -661,7 +659,7 @@ module Hol : Hol_kernel = struct
              let dtm = safe_mk_eq c r in
              let dth = Sequent([],dtm,idx) in
              (the_definitions := dth::(!the_definitions);
-              new_proof (Proof(idx,dth,Pdefinition(dtm))))
+              new_proof (Proof(idx,dth,Pdef(dtm,cname,ty))))
     | _ -> failwith "new_basic_definition"
 
 (* ------------------------------------------------------------------------- *)
@@ -677,7 +675,7 @@ module Hol : Hol_kernel = struct
 (* Where "abs" and "rep" are new constants with the nominated names.         *)
 (* ------------------------------------------------------------------------- *)
 
-  let new_basic_type_definition tyname (absname,repname) (Sequent(asl,c)) =
+  let new_basic_type_definition tyname (absname,repname) (Sequent(asl,c,p)) =
     if exists (can get_const_type) [absname; repname] then
       failwith "new_basic_type_definition: Constant(s) already in use" else
     if not (asl = []) then
@@ -697,9 +695,19 @@ module Hol : Hol_kernel = struct
     let abs = (new_constant(absname,absty); Const(absname,absty))
     and rep = (new_constant(repname,repty); Const(repname,repty)) in
     let a = Var("a",aty) and r = Var("r",rty) in
-    Sequent([],safe_mk_eq (Comb(abs,mk_comb(rep,a))) a),
-    Sequent([],safe_mk_eq (Comb(P,r))
-                          (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r))
+    let aidx = length !the_proofs in
+    let atm = safe_mk_eq (Comb(abs,mk_comb(rep,a))) a in
+    let ath = Sequent([],atm,aidx) in
+    let ridx = aidx + 1 in
+    let rtm = safe_mk_eq (Comb(P,r))
+                           (safe_mk_eq (mk_comb(rep,mk_comb(abs,r))) r) in
+    let rth = Sequent([],rtm,ridx) in
+    (new_proof (Proof(aidx,
+                      ath,
+                      Pdeft(List.nth !the_proofs p,atm,absname,absty))),
+     new_proof (Proof(ridx,
+                      rth,
+                      Pdeft(List.nth !the_proofs p,rtm,repname,repty))))
 
 end;;
 
