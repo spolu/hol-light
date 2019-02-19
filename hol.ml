@@ -113,6 +113,7 @@ loads "parser.ml";;     (* Lexer and parser                                  *)
 (* ------------------------------------------------------------------------- *)
 (* Higher level deductive system.                                            *)
 (* ------------------------------------------------------------------------- *)
+
 loads "equal.ml";;      (* Basic equality reasoning and conversionals        *)
 loads "bool.ml";;       (* Boolean theory and basic derived rules            *)
 loads "drule.ml";;      (* Additional derived rules                          *)
