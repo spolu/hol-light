@@ -36,7 +36,7 @@ let proof_index proof =
 
 let proof_content_string content =
   match content with
-    Prefl(tm) -> Printf.sprintf "[\"REFL\", %s]"
+    Prefl(tm) -> Printf.sprintf "[\"REFL\", \"%s\"]"
                                 (term_string tm)
   | Ptrans(p1,p2) -> Printf.sprintf "[\"TRANS\", %d, %d]"
                                     (proof_index p1)
@@ -44,7 +44,7 @@ let proof_content_string content =
   | Pmkcomb(p1,p2) -> Printf.sprintf "[\"MK_COMB\", %d, %d]"
                                      (proof_index p1)
                                      (proof_index p2)
-  | Pabs(p1,tm) -> Printf.sprintf "[\"ABS\", %d, \"%s\"])"
+  | Pabs(p1,tm) -> Printf.sprintf "[\"ABS\", %d, \"%s\"]"
                                   (proof_index p1)
                                   (term_string tm)
   | Pbeta(tm) -> Printf.sprintf "[\"BETA\", \"%s\"]"
@@ -57,26 +57,26 @@ let proof_content_string content =
   | Pdeduct(p1,p2) -> Printf.sprintf "[\"DEDUCT_ANTISYM_RULE\", %d, %d]"
                                      (proof_index p1)
                                      (proof_index p2)
-  | Pinst(p1,insts) -> Printf.sprintf "[\"INST\", %d, %s]"
+  | Pinst(p1,insts) -> Printf.sprintf "[\"INST\", %d, [%s]]"
                                       (proof_index p1)
                                       (inst_string insts)
   | Pinstt(p1,insts) -> Printf.sprintf "[\"INST_TYPE\", %d]"
                                        (proof_index p1)
-  | Paxiom(tm) -> Printf.sprintf "[AXIOM, \"%s\"]"
+  | Paxiom(tm) -> Printf.sprintf "[\"AXIOM\", \"%s\"]"
                                  (term_string tm)
   | Pdef(tm,name,ty) -> Printf.sprintf "[\"DEFINITION\", \"%s\", \"%s\"]"
                                        (term_string tm)
-                                       name
+                                       (String.escaped name)
   | Pdeft(p1,tm,name,ty) -> Printf.sprintf
                               "[\"TYPE_DEFINITION\", %d, \"%s\", \"%s\"]"
                               (proof_index p1)
                               (term_string tm)
-                              name
+                              (String.escaped name)
 
 
 let proof_string proof =
   let Proof(idx,thm,content) = proof in
-  Printf.sprintf "{\"id\": %d, \"pr\": %s)"
+  Printf.sprintf "{\"id\": %d, \"pr\": %s}"
                  idx
                  (proof_content_string content);;
 
