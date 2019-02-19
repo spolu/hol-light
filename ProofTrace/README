@@ -1,0 +1,9 @@
+# Usage
+
+```
+# #use "hol.ml";;
+# #use "ProofTrace/proofs.ml";;
+# dump_names "ProofTrace/prooftrace.names";; 
+# dump_proofs "ProofTrace/prooftrace.proofs";;
+# dump_theorems "ProofTrace/prooftrace.theorems";;
+```
