@@ -1,3 +1,14 @@
+(* ========================================================================= *)
+(* Tooling for the generation of the ProofTrace dataset.                     *)
+(* ========================================================================= *)
+
+#load "unix.cma";;
+#load "str.cma";;
+
+(* ------------------------------------------------------------------------- *)
+(* Marshalling of term.                                                      *)
+(* ------------------------------------------------------------------------- *)
+
 let rec term_string tm =
   match tm with
     Var(v,_) -> Printf.sprintf "v%s" v
@@ -5,14 +16,9 @@ let rec term_string tm =
   | Comb(t1,t2) -> Printf.sprintf "C(%s,%s)" (term_string t1) (term_string t2)
   | Abs(t1,t2) -> Printf.sprintf "A(%s,%s)" (term_string t1) (term_string t2)
 
-let thm_string th =
-  let asl,tm = dest_thm th in
-  let rec asl_string asl =
-    match asl with
-      [] -> ""
-    | tm::[] -> Printf.sprintf("%s") (term_string tm)
-    | tm::tail -> Printf.sprintf("%s,%s") (term_string tm) (asl_string tail)
-  in Printf.sprintf "T([%s],%s)" (asl_string asl) (term_string tm)
+(* ------------------------------------------------------------------------- *)
+(* Marshalling of proof.                                                     *)
+(* ------------------------------------------------------------------------- *)
 
 let rec inst_string insts =
   match insts with
@@ -65,7 +71,6 @@ let proof_content_string content =
                                           (proof_index p1)
                                           (term_string tm)
                                           name
-  | _ -> failwith "proof_content_string: unknown proof content"
 
 
 let proof_string proof =
@@ -74,6 +79,19 @@ let proof_string proof =
                  idx
                  (proof_content_string content);;
 
+(* ------------------------------------------------------------------------- *)
+(* Marshalling of thm.                                                       *)
+(* ------------------------------------------------------------------------- *)
+
+let thm_string th =
+  let asl,tm = dest_thm th in
+  let rec asl_string asl =
+    match asl with
+      [] -> ""
+    | tm::[] -> Printf.sprintf("%s") (term_string tm)
+    | tm::tail -> Printf.sprintf("%s,%s") (term_string tm) (asl_string tail)
+  in Printf.sprintf "T([%s],%s)" (asl_string asl) (term_string tm)
+
 let theorem_string proof =
   let Proof(idx,thm,content) = proof in
   Printf.sprintf "THEOREM(%d,%s)"
@@ -81,13 +99,18 @@ let theorem_string proof =
                  (thm_string thm);;
 
 
+(* ------------------------------------------------------------------------- *)
+(* Proofs and Theorems trace dumping.                                        *)
+(* ------------------------------------------------------------------------- *)
+
 let dump_proofs filename =
   let foutc = open_out filename in
   (do_list (fun p -> Printf.fprintf foutc
                                     "%s\n"
                                     (proof_string p)) (proofs());
    flush foutc;
-   close_out foutc);;
+   close_out foutc)
+;;
 
 let dump_theorems filename =
   let foutc = open_out filename in
@@ -95,4 +118,143 @@ let dump_theorems filename =
                      "%s\n"
                      (theorem_string p)) (proofs());
    flush foutc;
-   close_out foutc);;
+   close_out foutc)
+;;
+
+(* ------------------------------------------------------------------------- *)
+(* Theorem names extraction (inspired by HolStep, but non-destructive).      *)
+(* ------------------------------------------------------------------------- *)
+
+let PROVE_1_RE = Str.regexp (String.concat "" (
+  "\\(let\\|and\\)[ \n\t]*"::
+  "\\([a-zA-Z0-9_-]+\\)[ \n\t]*"::
+  "=[ \n\t]*"::
+  "\\(prove\\|"::
+  "prove_by_refinement\\|"::
+  "new_definition\\|"::
+  "new_basic_definition\\|"::
+  "new_axiom\\|"::
+  "new_infix_definition\\|"::
+  "INT_OF_REAL_THM\\|"::
+  "define_finite_type\\|"::
+  "TAUT\\|"::
+  "INT_ARITH\\|"::
+  "new_recursive_definition\\)"::
+  []
+))
+
+let PROVE_2_RE = Str.regexp (String.concat "" (
+  "\\(let\\|and\\)[ \n\t]*"::
+  "\\([a-zA-Z0-9_-]+\\)[ \n\t]*,[ \n\t]*"::
+  "\\([a-zA-Z0-9_-]+\\)[ \n\t]*"::
+  "=[ \n\t]*"::
+  "\\(define_type\\|"::
+  "(CONJ_PAIR o prove)\\)"::
+  []
+))
+
+let PROVE_3_RE = Str.regexp (String.concat "" (
+  "\\(let\\|and\\)[ \n\t]*"::
+  "\\([a-zA-Z0-9_-]+\\)[ \n\t]*,[ \n\t]*"::
+  "\\([a-zA-Z0-9_-]+\\)[ \n\t]*,[ \n\t]*"::
+  "\\([a-zA-Z0-9_-]+\\)[ \n\t]*"::
+  "=[ \n\t]*"::
+  "\\(new_inductive_definition\\)"::
+  []
+))
+
+let source_files() =
+  let select str = Str.string_match (Str.regexp ".*\\.[hm]l$") str 0 in
+  let rec walk acc = function
+  | [] -> (acc)
+  | dir::tail ->
+      let contents = Array.to_list (Sys.readdir dir) in
+      let contents = List.rev_map (Filename.concat dir) contents in
+      let dirs, files =
+        List.fold_left (fun (dirs,files) f ->
+                          match Sys.is_directory f with
+                          | false -> (dirs, f::files)  (* Regular file *)
+                          | true -> (f::dirs, files)  (* Directory *)
+        ) ([],[]) contents in
+      let matched = List.filter (select) files in
+        walk (matched @ acc) (dirs @ tail)
+  in walk [] [Sys.getcwd()]
+;;
+
+let load_file f =
+  let ic = open_in f in
+  let n = in_channel_length ic in
+  let s = Bytes.create n in
+  really_input ic s 0 n;
+  close_in ic;
+  (s)
+
+let extract_prove_1 f =
+  let content = Bytes.to_string(load_file f) in
+  let rec search acc start =
+    try
+      let _ = Str.search_forward PROVE_1_RE content start in
+      let matches = (Str.matched_group 2 content)::[] in
+      search (matches @ acc) (Str.match_end())
+    with e -> (acc)
+  in search [] 0
+;;
+
+let extract_prove_2 f =
+  let content = Bytes.to_string(load_file f) in
+  let rec search acc start =
+    try
+      let _ = Str.search_forward PROVE_2_RE content start in
+      let matches = (Str.matched_group 2 content)::
+                    (Str.matched_group 3 content)::
+                    [] in
+      search (matches @ acc) (Str.match_end())
+    with e -> (acc)
+  in search [] 0
+;;
+
+let extract_prove_3 f =
+  let content = Bytes.to_string(load_file f) in
+  let rec search acc start =
+    try
+      let _ = Str.search_forward PROVE_3_RE content start in
+      let matches = (Str.matched_group 2 content)::
+                    (Str.matched_group 3 content)::
+                    (Str.matched_group 4 content)::
+                    [] in
+      search (matches @ acc) (Str.match_end())
+    with e -> (acc)
+  in search [] 0
+;;
+
+(* ------------------------------------------------------------------------- *)
+(* Names trace dumping (:see_no_evil)                                        *)
+(* ------------------------------------------------------------------------- *)
+
+let eval code =
+  let as_buf = Lexing.from_string code in
+  let parsed = !Toploop.parse_toplevel_phrase as_buf in
+  ignore (Toploop.execute_phrase true Format.std_formatter parsed)
+
+let _CODE_GEN name = Printf.sprintf
+                       "_IDX := proof_index (proof_of %s);;"
+                       name
+let _IDX = ref (0)
+
+let dump_names filename =
+  let foutc = open_out filename in
+  let acc = ref ([]) in
+  (do_list (fun f -> acc := !acc @
+                     (extract_prove_1 f) @
+                     (extract_prove_2 f) @
+                     (extract_prove_3 f)) (source_files());
+   acc := List.sort_uniq compare !acc;
+   do_list (fun name ->
+               try
+                 eval (_CODE_GEN name);
+                 Printf.fprintf foutc "NAME(%d,%s)\n" !_IDX name;
+               with _ -> ()
+            ) (!acc);
+   flush foutc;
+   close_out foutc)
+;;

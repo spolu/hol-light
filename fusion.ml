@@ -13,7 +13,7 @@ module type Hol_kernel =
   sig
       type hol_type = private
         Tyvar of string
-      | Tyapp of string * hol_type list
+      | Tyapp of string *  hol_type list
 
       type term = private
         Var of string * hol_type
