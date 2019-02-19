@@ -11,8 +11,8 @@
 
 let rec term_string tm =
   match tm with
-    Var(v,_) -> Printf.sprintf "v%s" v
-  | Const(c,_) -> Printf.sprintf "c%s" c
+    Var(v,_) -> Printf.sprintf "v%s" (String.escaped v)
+  | Const(c,_) -> Printf.sprintf "c%s" (String.escaped c)
   | Comb(t1,t2) -> Printf.sprintf "C(%s,%s)" (term_string t1) (term_string t2)
   | Abs(t1,t2) -> Printf.sprintf "A(%s,%s)" (term_string t1) (term_string t2)
 
@@ -90,7 +90,7 @@ let thm_string th =
     match asl with
       [] -> ""
     | tm::[] -> Printf.sprintf "\"%s\"" (term_string tm)
-    | tm::tail -> Printf.sprintf "\"%s\",\"%s\""
+    | tm::tail -> Printf.sprintf "\"%s\", %s"
                                  (term_string tm)
                                  (asl_string tail)
   in Printf.sprintf "{\"hy\": [%s], \"cc\": \"%s\"}"
