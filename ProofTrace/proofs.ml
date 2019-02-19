@@ -6,7 +6,7 @@
 #load "str.cma";;
 
 (* ------------------------------------------------------------------------- *)
-(* Marshalling of term.                                                      *)
+(* Marshalling of term to AST-like.                                          *)
 (* ------------------------------------------------------------------------- *)
 
 let rec term_string tm =
@@ -17,18 +17,18 @@ let rec term_string tm =
   | Abs(t1,t2) -> Printf.sprintf "A(%s,%s)" (term_string t1) (term_string t2)
 
 (* ------------------------------------------------------------------------- *)
-(* Marshalling of proof.                                                     *)
+(* Marshalling of proof to JSON parts.                                       *)
 (* ------------------------------------------------------------------------- *)
 
 let rec inst_string insts =
   match insts with
     [] -> ""
-  | (t1,t2)::[] -> Printf.sprintf "I(%s,%s)"
-                                  (term_string t1)
+  | (t1,t2)::[] -> Printf.sprintf "[\"%s\", \"%s\"]"
                                   (term_string t2)
-  | (t1,t2)::tail -> Printf.sprintf "I(%s,%s),%s"
-                                    (term_string t1)
+                                  (term_string t1)
+  | (t1,t2)::tail -> Printf.sprintf "[\"%s\", \"%s\"], %s"
                                     (term_string t2)
+                                    (term_string t1)
                                     (inst_string tail)
 
 let proof_index proof =
@@ -36,51 +36,52 @@ let proof_index proof =
 
 let proof_content_string content =
   match content with
-    Prefl(tm) -> Printf.sprintf "REFL(%s)"
+    Prefl(tm) -> Printf.sprintf "[\"REFL\", %s]"
                                 (term_string tm)
-  | Ptrans(p1,p2) -> Printf.sprintf "TRANS(%d,%d)"
+  | Ptrans(p1,p2) -> Printf.sprintf "[\"TRANS\", %d, %d]"
                                     (proof_index p1)
                                     (proof_index p2)
-  | Pmkcomb(p1,p2) -> Printf.sprintf "MK_COMB(%d,%d)"
+  | Pmkcomb(p1,p2) -> Printf.sprintf "[\"MK_COMB\", %d, %d]"
                                      (proof_index p1)
                                      (proof_index p2)
-  | Pabs(p1,tm) -> Printf.sprintf "ABS(%d,%s)"
+  | Pabs(p1,tm) -> Printf.sprintf "[\"ABS\", %d, \"%s\"])"
                                   (proof_index p1)
                                   (term_string tm)
-  | Pbeta(tm) -> Printf.sprintf "BETA(%s)"
+  | Pbeta(tm) -> Printf.sprintf "[\"BETA\", \"%s\"]"
                                 (term_string tm)
-  | Passume(tm) -> Printf.sprintf "ASSUME(%s)"
+  | Passume(tm) -> Printf.sprintf "[\"ASSUME\", \"%s\"]"
                                   (term_string tm)
-  | Peqmp(p1,p2) -> Printf.sprintf "EQ_MP(%d,%d)"
+  | Peqmp(p1,p2) -> Printf.sprintf "[\"EQ_MP\", %d, %d]"
                                    (proof_index p1)
                                    (proof_index p2)
-  | Pdeduct(p1,p2) -> Printf.sprintf "DEDUCT_ANTISYM_RULE(%d,%d)"
+  | Pdeduct(p1,p2) -> Printf.sprintf "[\"DEDUCT_ANTISYM_RULE\", %d, %d]"
                                      (proof_index p1)
                                      (proof_index p2)
-  | Pinst(p1,insts) -> Printf.sprintf "INST(%d,[%s])"
+  | Pinst(p1,insts) -> Printf.sprintf "[\"INST\", %d, %s]"
                                       (proof_index p1)
                                       (inst_string insts)
-  | Pinstt(p1,insts) -> Printf.sprintf "INST_TYPE(%d)"
+  | Pinstt(p1,insts) -> Printf.sprintf "[\"INST_TYPE\", %d]"
                                        (proof_index p1)
-  | Paxiom(tm) -> Printf.sprintf "AXIOM(%s)"
+  | Paxiom(tm) -> Printf.sprintf "[AXIOM, \"%s\"]"
                                  (term_string tm)
-  | Pdef(tm,name,ty) -> Printf.sprintf "DEFINITION(%s,%s)"
+  | Pdef(tm,name,ty) -> Printf.sprintf "[\"DEFINITION\", \"%s\", \"%s\"]"
                                        (term_string tm)
                                        name
-  | Pdeft(p1,tm,name,ty) -> Printf.sprintf "TYPE_DEFINITION(%d,%s,%s)"
-                                          (proof_index p1)
-                                          (term_string tm)
-                                          name
+  | Pdeft(p1,tm,name,ty) -> Printf.sprintf
+                              "[\"TYPE_DEFINITION\", %d, \"%s\", \"%s\"]"
+                              (proof_index p1)
+                              (term_string tm)
+                              name
 
 
 let proof_string proof =
   let Proof(idx,thm,content) = proof in
-  Printf.sprintf "PROOF(%d,%s)"
+  Printf.sprintf "{\"id\": %d, \"pr\": %s)"
                  idx
                  (proof_content_string content);;
 
 (* ------------------------------------------------------------------------- *)
-(* Marshalling of thm.                                                       *)
+(* Marshalling of thm to JSON.                                               *)
 (* ------------------------------------------------------------------------- *)
 
 let thm_string th =
@@ -88,13 +89,17 @@ let thm_string th =
   let rec asl_string asl =
     match asl with
       [] -> ""
-    | tm::[] -> Printf.sprintf("%s") (term_string tm)
-    | tm::tail -> Printf.sprintf("%s,%s") (term_string tm) (asl_string tail)
-  in Printf.sprintf "T([%s],%s)" (asl_string asl) (term_string tm)
+    | tm::[] -> Printf.sprintf "\"%s\"" (term_string tm)
+    | tm::tail -> Printf.sprintf "\"%s\",\"%s\""
+                                 (term_string tm)
+                                 (asl_string tail)
+  in Printf.sprintf "{\"hy\": [%s], \"cc\": \"%s\"}"
+                    (asl_string asl)
+                    (term_string tm)
 
 let theorem_string proof =
   let Proof(idx,thm,content) = proof in
-  Printf.sprintf "THEOREM(%d,%s)"
+  Printf.sprintf "{\"id\": %d, \"th\": %s}"
                  idx
                  (thm_string thm);;
 
@@ -252,7 +257,9 @@ let dump_names filename =
    do_list (fun name ->
                try
                  eval (_CODE_GEN name);
-                 Printf.fprintf foutc "NAME(%d,%s)\n" !_IDX name;
+                 Printf.fprintf foutc
+                                "{\"id\": %d, \"nm\": \"%s\"}\n"
+                                !_IDX name;
                with _ -> ()
             ) (!acc);
    flush foutc;
