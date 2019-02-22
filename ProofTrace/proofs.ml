@@ -9,10 +9,13 @@
 (* Marshalling of term to AST-like.                                          *)
 (* ------------------------------------------------------------------------- *)
 
+let escaped str =
+  Str.global_replace (Str.regexp ",") "_comma_" (String.escaped str);;
+
 let rec term_string tm =
   match tm with
-    Var(v,_) -> Printf.sprintf "v%s" (String.escaped v)
-  | Const(c,_) -> Printf.sprintf "c%s" (String.escaped c)
+    Var(v,_) -> Printf.sprintf "v%s" (escaped v)
+  | Const(c,_) -> Printf.sprintf "c%s" (escaped c)
   | Comb(t1,t2) -> Printf.sprintf "C(%s,%s)" (term_string t1) (term_string t2)
   | Abs(t1,t2) -> Printf.sprintf "A(%s,%s)" (term_string t1) (term_string t2)
 
@@ -66,12 +69,12 @@ let proof_content_string content =
                                  (term_string tm)
   | Pdef(tm,name,ty) -> Printf.sprintf "[\"DEFINITION\", \"%s\", \"%s\"]"
                                        (term_string tm)
-                                       (String.escaped name)
+                                       (escaped name)
   | Pdeft(p1,tm,name,ty) -> Printf.sprintf
                               "[\"TYPE_DEFINITION\", %d, \"%s\", \"%s\"]"
                               (proof_index p1)
                               (term_string tm)
-                              (String.escaped name)
+                              (escaped name)
 
 
 let proof_string proof =
